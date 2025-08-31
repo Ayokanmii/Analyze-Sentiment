@@ -1,0 +1,323 @@
+{
+  "name": "My workflow 2",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        160
+      ],
+      "id": "9a1b97d3-7aea-4d92-9f48-dcf312130476",
+      "name": "Daily Schedule"
+    },
+    {
+      "parameters": {
+        "url": "https://www.amazon.com/product-reviews/B08N5WRWNW",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -272,
+        160
+      ],
+      "id": "0393c01e-9cad-43d7-ac16-3283360d39a4",
+      "name": "Fetch Amazon Reviews"
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('HTTP Status:', $json.status);\nconsole.log('Raw HTML Input:', $json.data?.substring(0, 200));\nif (!$json.data || $json.status !== 200) {\n  console.log('HTTP Error or No Data:', { status: $json.status, error: $json.error || 'No HTML data' });\n  return [{ reviewText: 'No reviews found', reviewId: `fallback_${Date.now()}`, date: new Date().toISOString() }];\n}\nconst html = $json.data || '';\nconst reviewRegex = /<span data-hook=\"review-body\"[^>]*>(.*?)<\\/span>|class=\"a-size-base[^>]*>(.*?)<\\/span>/g;\nconst reviews = [];\nlet match;\nwhile ((match = reviewRegex.exec(html)) !== null) {\n  const text = (match[1] || match[2] || '').replace(/<[^>]+>/g, '').trim();\n  if (text) reviews.push(text);\n}\nconsole.log('Extracted Reviews:', reviews);\nif (!reviews.length) {\n  console.log('No reviews matched, using fallback');\n  return [{ reviewText: 'No reviews found', reviewId: `fallback_${Date.now()}`, date: new Date().toISOString() }];\n}\nreturn reviews.map((review, index) => ({\n  reviewText: review,\n  reviewId: `review_${index}_${Date.now()}`,\n  date: new Date().toISOString(),\n}));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        160
+      ],
+      "id": "8f3f3aeb-ce83-4780-ba62-d1a2c008be97",
+      "name": "Parse Reviews"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "Classify the sentiment of this Amazon review as positive, negative, or neutral. Return JSON with 'sentiment' (positive, negative, neutral) and 'confidence' (0-1). Keep analysis concise.\n\nReview: {{$json.reviewText}}",
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.7,
+      "position": [
+        160,
+        160
+      ],
+      "id": "83f3c19a-c45d-4996-b27d-b6334af5765d",
+      "name": "Analyze Sentiment"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-3.5-turbo-instruct",
+        "options": {
+          "temperature": 0.7
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        448,
+        48
+      ],
+      "id": "271e0a14-3bd9-4efe-ae32-1f386270311a",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "9vFLTZalfVdLgkEh",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "console.log('Sentiment Input:', $json);\nconst out = $items()[0].json;\nlet sentimentData = {};\nif (out.generated_text) {\n  try {\n    sentimentData = JSON.parse(out.generated_text);\n  } catch (e) {\n    console.log('JSON Parse Error:', e.message);\n    sentimentData = { sentiment: 'neutral', confidence: 0.5 };\n  }\n} else {\n  sentimentData = { sentiment: out.text || 'neutral', confidence: out.confidence || 0.5 };\n}\nreturn [{\n  ...$json,\n  sentiment: sentimentData.sentiment || 'neutral',\n  confidence: Number(sentimentData.confidence) || 0.5\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        320,
+        384
+      ],
+      "id": "cffc4af4-5106-4ab7-bb59-50e4397d568b",
+      "name": "Parse Sentiment"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1yjfWNZaz_3HDp__j3_ZPSrbFqec06jPGaQ1b23HPSP4",
+          "mode": "list",
+          "cachedResultName": "sentiment_dashboard",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yjfWNZaz_3HDp__j3_ZPSrbFqec06jPGaQ1b23HPSP4/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Sheet1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1yjfWNZaz_3HDp__j3_ZPSrbFqec06jPGaQ1b23HPSP4/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "data": "{{$json.date}}",
+            "review": "{{$json.reviewText}}",
+            "sentiment": "{{$json.sentiment}}",
+            "confidence": "{{$json.confidence}}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "data",
+              "displayName": "data",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "review",
+              "displayName": "review",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "sentiment",
+              "displayName": "sentiment",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confidence",
+              "displayName": "confidence",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        480,
+        384
+      ],
+      "id": "66b10c7e-b78e-4b86-b664-eeac0e61c419",
+      "name": "Append to Dashboard",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "kFZWyYgv1cluIy5e",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $items();\nconst summary = items.map(item => {\n  const review = item.json.reviewText ? item.json.reviewText.substring(0, 50) : 'No review';\n  return `${review}... (${item.json.sentiment}, ${item.json.confidence})`;\n}).join('\\n');\nconsole.log('Email Summary:', summary);\nreturn [{\n  summary: `Daily Review Sentiment Summary:\\n\\n${summary || 'No reviews processed today.'}\\n\\nBest regards,\\nShopWise Analytics`\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        704,
+        384
+      ],
+      "id": "fbb8660f-d277-443e-bd00-90075e898793",
+      "name": "Prepare Email Summary"
+    },
+    {
+      "parameters": {
+        "sendTo": "olatunjiayokanmi@gmail.com",
+        "subject": "📊 ShopWise Daily Review Sentiment Report",
+        "emailType": "text",
+        "message": "=Dear ShopWise Team,\n\nHere is the daily sentiment analysis for product reviews:\n\nReview 1: No reviews found... (neutral, Confidence: 0.50)\n\nView full details: https://docs.google.com/spreadsheets/d/1yjfWNZaz_3HDp__j3_ZPSrbFqec06jPGaQ1b23HPSP4\n\nBest regards,\nShopWise Analytics",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        752,
+        128
+      ],
+      "id": "1961a921-b901-4906-8298-e6e7e98e1666",
+      "name": "Send Summary Email",
+      "webhookId": "161092dd-c415-45b8-ac6a-d1849a5c49f4",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "bGoOLU4g6w0bknyx",
+          "name": "Gmail account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Daily Schedule": {
+      "main": [
+        [
+          {
+            "node": "Fetch Amazon Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Amazon Reviews": {
+      "main": [
+        [
+          {
+            "node": "Parse Reviews",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Reviews": {
+      "main": [
+        [
+          {
+            "node": "Analyze Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analyze Sentiment",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Parse Sentiment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Sentiment": {
+      "main": [
+        [
+          {
+            "node": "Append to Dashboard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append to Dashboard": {
+      "main": [
+        [
+          {
+            "node": "Prepare Email Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Email Summary": {
+      "main": [
+        [
+          {
+            "node": "Send Summary Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "6b536f8c-27b7-417c-acf2-547b494c9d44",
+  "meta": {
+    "instanceId": "f739b75569b675c0f98ff3524581fe3cc5a241b7c1f226618b2b3f0854bf1f57"
+  },
+  "id": "RF0rJKwwarjZ0MW2",
+  "tags": []
+}
