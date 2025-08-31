@@ -64,7 +64,7 @@ Gmail Node → Sends daily email
 
 1. Clone the repo
 
-git clone https://github.
+git clone https://github.com/Ayokanmii/Analyze-Sentiment
 
 2. Import workflow.json into your n8n instance (via Import Workflow).
 
